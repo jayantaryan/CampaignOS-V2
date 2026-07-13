@@ -1,52 +1,38 @@
 // ─── Marketing Agent (Gemini) ───────────────────────────────────────────────
+// server/ai/marketingAgent.js
 import { GoogleGenAI } from '@google/genai';
+import { MARKETING_PROMPT } from '../services/agentPrompts.js';
+import 'dotenv/config';
 
-/**
- * Analyze campaign from a marketing strategy perspective.
- * Returns { recommendedBudget, status, reason, confidence }
- */
-export async function runMarketingAgent(campaign) {
-  // ── Mock mode ─────────────────────────────────────────────────────────────
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+export const runMarketingAgent = async (campaign) => {
+  // Fallback if we want to test without using API credits
   if (process.env.MOCK_AI === 'true') {
-    return {
-      recommendedBudget: Math.round(campaign.budget * 1.15),
-      status: 'approve',
-      reason: `The campaign "${campaign.name}" targeting ${campaign.audience || 'broad audience'} aligns well with current market trends. A 15% budget increase is recommended to maximize reach and engagement for the ${campaign.product || 'product'} launch.`,
-      confidence: 0.87,
-    };
+    return { decision: "Approve", reason: "Mock AI: Marketing loves the broad reach.", recommended_budget: campaign.budget + 5000, confidence: 0.85 };
   }
 
-  // ── Real Gemini call ──────────────────────────────────────────────────────
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  try {
+    // 1. Inject the real campaign data into the prompt
+    const prompt = MARKETING_PROMPT
+      .replace('{{name}}', campaign.name)
+      .replace('{{budget}}', campaign.budget)
+      .replace('{{objective}}', campaign.objective || 'N/A')
+      .replace('{{audience}}', campaign.audience || 'N/A');
 
-  const prompt = `You are a senior marketing strategist. Analyze this campaign and provide your recommendation.
+    // 2. Call Gemini
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
 
-Campaign Details:
-- Name: ${campaign.name}
-- Product: ${campaign.product}
-- Objective: ${campaign.objective}
-- Target Audience: ${campaign.audience}
-- Proposed Budget: ₹${campaign.budget}
-- Duration: ${campaign.startDate} to ${campaign.endDate}
-
-Respond ONLY with valid JSON (no markdown, no code fences):
-{
-  "recommendedBudget": <number>,
-  "status": "approve" | "suggest" | "reject",
-  "reason": "<2-3 sentence explanation>",
-  "confidence": <0.0 to 1.0>
-}`;
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: prompt,
-    config: {
-      temperature: 0.7,
-      maxOutputTokens: 300,
-      responseMimeType: 'application/json',
-    },
-  });
-
-  const text = response.text.trim();
-  return JSON.parse(text);
-}
+    // 3. Parse and return the JSON
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.error("Marketing Agent Error:", error);
+    return { decision: "Error", reason: "AI generation failed.", recommended_budget: 0, confidence: 0 };
+  }
+};

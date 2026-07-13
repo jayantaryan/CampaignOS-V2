@@ -1,53 +1,35 @@
 // ─── Sales Agent (Gemini) ───────────────────────────────────────────────────
+// server/ai/salesAgent.js
 import { GoogleGenAI } from '@google/genai';
+import { SALES_PROMPT } from '../services/agentPrompts.js';
+import 'dotenv/config';
 
-/**
- * Analyze campaign from a sales/revenue growth perspective.
- * Returns { recommendedBudget, status, reason, confidence }
- */
-export async function runSalesAgent(campaign) {
-  // ── Mock mode ─────────────────────────────────────────────────────────────
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// 👇 Notice this is now runSalesAgent
+export const runSalesAgent = async (campaign) => {
   if (process.env.MOCK_AI === 'true') {
-    return {
-      recommendedBudget: Math.round(campaign.budget * 1.05),
-      status: 'approve',
-      reason: `The "${campaign.name}" campaign has strong potential for pipeline growth in the ${campaign.audience || 'target'} segment. A modest 5% budget increase to ₹${Math.round(campaign.budget * 1.05)} would help capture additional market share for ${campaign.product || 'the product'}.`,
-      confidence: 0.82,
-    };
+    return { decision: "Approve", reason: "Mock AI: Sales sees high conversion potential.", recommended_budget: campaign.budget, confidence: 0.88 };
   }
 
-  // ── Real Gemini call ──────────────────────────────────────────────────────
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  try {
+    const prompt = SALES_PROMPT
+      .replace('{{name}}', campaign.name)
+      .replace('{{budget}}', campaign.budget)
+      .replace('{{objective}}', campaign.objective || 'N/A')
+      .replace('{{audience}}', campaign.audience || 'N/A');
 
-  const prompt = `You are a senior sales strategist. Evaluate this campaign from a revenue and pipeline growth perspective.
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
 
-Campaign Details:
-- Name: ${campaign.name}
-- Product: ${campaign.product}
-- Objective: ${campaign.objective}
-- Target Audience: ${campaign.audience}
-- Proposed Budget: ₹${campaign.budget}
-- Duration: ${campaign.startDate} to ${campaign.endDate}
-
-Consider lead generation, conversion potential, and market penetration.
-Respond ONLY with valid JSON (no markdown):
-{
-  "recommendedBudget": <number>,
-  "status": "approve" | "suggest" | "reject",
-  "reason": "<2-3 sentence explanation>",
-  "confidence": <0.0 to 1.0>
-}`;
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: prompt,
-    config: {
-      temperature: 0.6,
-      maxOutputTokens: 300,
-      responseMimeType: 'application/json',
-    },
-  });
-
-  const text = response.text.trim();
-  return JSON.parse(text);
-}
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.error("Sales Agent Error:", error);
+    return { decision: "Error", reason: "AI generation failed.", recommended_budget: 0, confidence: 0 };
+  }
+};
