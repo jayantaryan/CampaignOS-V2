@@ -25,6 +25,10 @@ export async function create(req, res) {
       endDate:   endDate   || '',
     });
 
+    // 👇 NEW: Force the status to pending and log it to Notion immediately
+    campaign.status = 'pending'; 
+    sendToNotion(campaign).catch(err => console.error('Notion pending log failed:', err.message));
+
     res.status(201).json(campaign);
   } catch (err) {
     console.error('Create campaign error:', err);
@@ -105,6 +109,22 @@ export async function rejectCampaign(req, res) {
 
     // Update status to rejected
     const updated = svc.updateCampaignStatus(id, 'rejected');
+
+    // 👇 NEW: Fire integrations for the rejection!
+    Promise.allSettled([
+      sendToNotion(updated),
+      sendToSlack(updated),
+      sendApprovalEmail(updated),
+    ]).then(results => {
+      results.forEach((r, i) => {
+        const names = ['Notion', 'Slack', 'Email'];
+        if (r.status === 'rejected') {
+          console.warn(`⚠️  ${names[i]} integration failed:`, r.reason?.message || r.reason);
+        } else {
+          console.log(`✅  ${names[i]} integration succeeded (Rejected)`);
+        }
+      });
+    });
 
     res.json({ message: 'Campaign rejected', campaign: updated });
   } catch (err) {

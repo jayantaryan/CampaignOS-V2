@@ -46,3 +46,34 @@ start().catch(err => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+
+
+
+
+
+// Add these imports at the top of server.js
+import { pollNotionForUpdates } from './integrations/notion.js';
+import * as svc from './services/campaignService.js';
+
+// ... your existing middleware and routes ...
+
+// Add this right before your app.listen() block:
+const START_POLLING = false; // Set to true when you are ready to test!
+
+if (START_POLLING) {
+  console.log("⏱️  Notion Polling Engine Started...");
+  
+  setInterval(() => {
+    pollNotionForUpdates((campaignName, notionStatus) => {
+      // Find the campaign in your local mock database by its name
+      const allCampaigns = svc.getAllCampaigns();
+      const localCampaign = allCampaigns.find(c => c.name === campaignName);
+      
+      // If the status in Notion is different than our local status, update it!
+      if (localCampaign && localCampaign.status !== notionStatus) {
+        console.log(`🔄 Notion Sync: Updating "${campaignName}" to ${notionStatus}`);
+        svc.updateCampaignStatus(localCampaign.id, notionStatus);
+      }
+    });
+  }, 10000); // Runs every 10,000 milliseconds (10 seconds)
+}
