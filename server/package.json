@@ -1,0 +1,24 @@
+{
+  "name": "campaignos-server",
+  "version": "1.0.0",
+  "description": "CampaignOS API Server – AI Marketing Decision Operating System",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0",
+    "@notionhq/client": "^2.2.15",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "nodemailer": "^6.9.16",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
